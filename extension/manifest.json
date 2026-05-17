@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "FocusBlock Companion",
+  "version": "1.0.0",
+  "description": "Realtime in-tab blocking driven by FocusBlock desktop app.",
+  "permissions": [
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
+    "storage",
+    "alarms",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_title": "FocusBlock Companion"
+  }
+}

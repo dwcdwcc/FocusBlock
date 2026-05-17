@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "FocusBlock Tracker (no-block)",
+  "version": "1.0.0",
+  "description": "Read-only companion: reports active/audible tab URL to FocusBlock desktop. Does NOT block anything.",
+  "permissions": [
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "FocusBlock Tracker (no-block)"
+  }
+}

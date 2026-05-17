@@ -189,6 +189,7 @@ function todayStr() {
 
 async function tick() {
   try {
+    checkDailyReset();
     const idle = powerMonitor.getSystemIdleTime();
     if (idle >= IDLE_THRESHOLD_SEC) {
       log(`[tick] idle ${idle}s — skip`);
@@ -244,6 +245,17 @@ function enforceLimits(domain, today) {
 function resetDailyLimits() {
   const removed = db.clearLimitBlocks();
   if (removed > 0) queueHostsSync();
+  db.setLastResetDate(todayStr());
+  electronLog.info(`[reset] cleared ${removed} limit blocks for ${todayStr()}`);
+}
+
+function checkDailyReset() {
+  const today = todayStr();
+  const last = db.getLastResetDate();
+  if (last !== today) {
+    electronLog.info(`[reset] stale last=${last} today=${today} — running reset`);
+    resetDailyLimits();
+  }
 }
 
 function scheduleMidnightReset() {
@@ -309,6 +321,7 @@ function registerIpc() {
 app.whenReady().then(async () => {
   try {
     db.init();
+    checkDailyReset();
     registerIpc();
     createWindow();
     try { createTray(); } catch (e) { console.error('tray create failed', e); }

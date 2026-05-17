@@ -15,8 +15,18 @@ function defaultState() {
     blocklist: {},
     limits: {},
     usage: {},
-    app_usage: {}
+    app_usage: {},
+    lastResetDate: null
   };
+}
+
+function getLastResetDate() {
+  return state.lastResetDate || null;
+}
+
+function setLastResetDate(date) {
+  state.lastResetDate = date;
+  saveSoon();
 }
 
 function init() {
@@ -252,5 +262,7 @@ module.exports = {
   statsAppToday,
   statsRange,
   statsTop,
-  statsAppTop
+  statsAppTop,
+  getLastResetDate,
+  setLastResetDate
 };

@@ -3,10 +3,13 @@ const ACTIVE_URL = 'http://127.0.0.1:47823/active';
 const POLL_SECONDS = 5;
 const RULE_ID_BASE = 1000;
 const MAX_RULES = 4000;
+const FAIL_OPEN_THRESHOLD = 3;
 
 let currentDomains = [];
 let lastReportedUrl = null;
 let lastReportTs = 0;
+let consecutiveFailures = 0;
+let failOpenActive = false;
 const REPORT_MIN_INTERVAL_MS = 1000;
 
 async function postActive(url, opts) {
@@ -158,14 +161,39 @@ async function redirectOpenTabs(domains) {
   }
 }
 
+async function clearAllRules() {
+  try {
+    const existing = await chrome.declarativeNetRequest.getDynamicRules();
+    if (!existing.length) return;
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: existing.map(r => r.id),
+      addRules: []
+    });
+    currentDomains = [];
+    console.log('[FocusBlock] fail-open: cleared', existing.length, 'rules (app unreachable)');
+  } catch (err) {
+    console.error('[FocusBlock] clearAllRules failed', err);
+  }
+}
+
 async function poll() {
   try {
     const res = await fetch(BLOCKLIST_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error('http ' + res.status);
     const data = await res.json();
+    consecutiveFailures = 0;
+    if (failOpenActive) {
+      failOpenActive = false;
+      console.log('[FocusBlock] app reachable again — resuming normal blocking');
+    }
     await applyDomains(data.domains);
   } catch (err) {
-    console.warn('[FocusBlock] poll failed', err.message);
+    consecutiveFailures++;
+    console.warn('[FocusBlock] poll failed', err.message, `(${consecutiveFailures}/${FAIL_OPEN_THRESHOLD})`);
+    if (consecutiveFailures >= FAIL_OPEN_THRESHOLD && !failOpenActive) {
+      failOpenActive = true;
+      await clearAllRules();
+    }
   }
 }
 

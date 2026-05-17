@@ -8,7 +8,17 @@ const db = require('./db');
 const tracker = require('./tracker');
 
 const isDev = process.env.NODE_ENV === 'development';
-const log = isDev ? console.log.bind(console) : () => {};
+
+const electronLog = require('electron-log/main');
+electronLog.initialize();
+electronLog.transports.file.level = 'info';
+electronLog.transports.file.maxSize = 5 * 1024 * 1024;
+electronLog.transports.console.level = isDev ? 'info' : false;
+Object.assign(console, electronLog.functions);
+const log = (...args) => electronLog.info(...args);
+
+process.on('uncaughtException', (err) => electronLog.error('uncaughtException', err));
+process.on('unhandledRejection', (err) => electronLog.error('unhandledRejection', err));
 
 const BLOCKLIST_PORT = 47823;
 let blocklistServer = null;

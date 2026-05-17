@@ -20,6 +20,13 @@ function defaultState() {
   };
 }
 
+function localDateStr(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function getLastResetDate() {
   return state.lastResetDate || null;
 }
@@ -57,7 +64,7 @@ function ensureShape() {
 function pruneOldDates(days) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const cutoffStr = localDateStr(cutoff);
   let removed = 0;
   for (const bucket of [state.usage, state.app_usage]) {
     for (const date of Object.keys(bucket)) {
@@ -177,7 +184,7 @@ function getUsageSeconds(date, domain) {
 }
 
 function statsToday() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
   const day = state.usage[today] || {};
   return Object.entries(day)
     .map(([domain, seconds]) => ({ domain, seconds }))
@@ -185,7 +192,7 @@ function statsToday() {
 }
 
 function statsAppToday() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
   const day = state.app_usage[today] || {};
   return Object.entries(day)
     .filter(([app]) => !isSystemApp(app))
@@ -199,7 +206,7 @@ function datesInRange(days) {
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
-    out.push(d.toISOString().slice(0, 10));
+    out.push(localDateStr(d));
   }
   return out;
 }

@@ -8,7 +8,18 @@ System-wide site blocker với time limits + usage insights (Windows). Khác Blo
 - **Time limits** — đặt giới hạn phút/ngày cho site, hết quota → auto block đến nửa đêm.
 - **Insights** — thống kê thời gian visit từng site (today, 7 days, top sites).
 
-## Cách chạy
+## Cài đặt (End-User)
+
+1. Tải `FocusBlock-Setup-x.x.x.exe` từ [Releases](https://github.com/dwcdwcc/focusblock/releases/latest).
+2. Right-click → **Run as administrator** (cần admin để sửa `hosts`).
+3. Next → Install → Finish.
+4. App tự chạy, icon tray góc phải taskbar.
+
+**Yêu cầu:** Windows 10/11, quyền admin.
+
+**Gỡ:** Settings → Apps → FocusBlock → Uninstall.
+
+## Phát triển
 
 ### 1. Cài dependencies
 

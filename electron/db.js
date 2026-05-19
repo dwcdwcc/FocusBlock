@@ -16,7 +16,8 @@ function defaultState() {
     limits: {},
     usage: {},
     app_usage: {},
-    lastResetDate: null
+    lastResetDate: null,
+    adultEnabled: false
   };
 }
 
@@ -251,6 +252,27 @@ function statsAppTop(days) {
     .slice(0, 20);
 }
 
+function getAdultEnabled() {
+  return !!state.adultEnabled;
+}
+
+function setAdultEnabled(v) {
+  state.adultEnabled = !!v;
+  saveSoon();
+}
+
+function statsDomainsTotal(domains) {
+  const keys = new Set(domains.map(cleanDomain));
+  const totals = {};
+  for (const k of keys) totals[k] = 0;
+  for (const day of Object.values(state.usage)) {
+    for (const [d, s] of Object.entries(day)) {
+      if (keys.has(d)) totals[d] = (totals[d] || 0) + s;
+    }
+  }
+  return totals;
+}
+
 module.exports = {
   init,
   listBlocked,
@@ -271,5 +293,8 @@ module.exports = {
   statsTop,
   statsAppTop,
   getLastResetDate,
-  setLastResetDate
+  setLastResetDate,
+  getAdultEnabled,
+  setAdultEnabled,
+  statsDomainsTotal
 };

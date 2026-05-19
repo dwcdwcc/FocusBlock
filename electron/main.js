@@ -2,6 +2,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, powerMonitor, Noti
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const https = require('https');
 
 const hosts = require('./hosts');
 const db = require('./db');
@@ -23,6 +24,75 @@ process.on('unhandledRejection', (err) => electronLog.error('unhandledRejection'
 const BLOCKLIST_PORT = 47823;
 let blocklistServer = null;
 
+const ADULT_LIST_URL = 'https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn/hosts';
+const ADULT_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+let adultDomains = [];
+
+function getAdultCachePath() {
+  return path.join(app.getPath('userData'), 'adult-cache.json');
+}
+
+function loadAdultCacheSync() {
+  const p = getAdultCachePath();
+  if (!fs.existsSync(p)) return null;
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }
+}
+
+function saveAdultCache(domains) {
+  fs.writeFileSync(getAdultCachePath(), JSON.stringify({ domains, fetchedAt: new Date().toISOString() }), 'utf8');
+}
+
+function isAdultCacheFresh(cache) {
+  if (!cache || !cache.fetchedAt) return false;
+  return Date.now() - new Date(cache.fetchedAt).getTime() < ADULT_CACHE_MAX_AGE_MS;
+}
+
+function parseAdultHosts(text) {
+  const domains = [];
+  for (const line of text.split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const parts = t.split(/\s+/);
+    if (parts.length < 2 || parts[0] !== '0.0.0.0') continue;
+    const d = parts[1].toLowerCase();
+    if (d === '0.0.0.0' || d === 'localhost' || d.startsWith('www.')) continue;
+    domains.push(d);
+  }
+  return domains;
+}
+
+function fetchUrl(url, redirects = 5) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    mod.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        if (!redirects) { reject(new Error('too many redirects')); return; }
+        fetchUrl(res.headers.location, redirects - 1).then(resolve).catch(reject);
+        return;
+      }
+      if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return; }
+      let data = '';
+      res.on('data', c => { data += c; });
+      res.on('end', () => resolve(data));
+    }).on('error', reject);
+  });
+}
+
+async function ensureAdultDomains() {
+  const cache = loadAdultCacheSync();
+  if (isAdultCacheFresh(cache) && cache.domains && cache.domains.length > 0) {
+    adultDomains = cache.domains;
+    log(`[adult] loaded ${adultDomains.length} domains from cache`);
+    return;
+  }
+  log('[adult] fetching StevenBlack porn list...');
+  const text = await fetchUrl(ADULT_LIST_URL);
+  const domains = parseAdultHosts(text);
+  saveAdultCache(domains);
+  adultDomains = domains;
+  log(`[adult] fetched ${adultDomains.length} domains`);
+}
+
 let hostsSyncQueued = false;
 let hostsSyncRunning = false;
 async function queueHostsSync() {
@@ -32,7 +102,8 @@ async function queueHostsSync() {
   }
   hostsSyncRunning = true;
   try {
-    await hosts.sync(db.allBlockedDomains());
+    const domains = [...db.allBlockedDomains(), ...(db.getAdultEnabled() ? adultDomains : [])];
+    await hosts.sync(domains);
   } catch (e) {
     console.error('hosts sync failed', e.message);
   } finally {
@@ -320,11 +391,43 @@ function registerIpc() {
   ipcMain.handle('stats:range', (_e, days) => db.statsRange(days || 7));
   ipcMain.handle('stats:top', (_e, days) => db.statsTop(days || 7));
   ipcMain.handle('stats:app-top', (_e, days) => db.statsAppTop(days || 7));
+  ipcMain.handle('stats:domains-total', (_e, domains) => db.statsDomainsTotal(domains || []));
+
+  ipcMain.handle('adult:status', () => {
+    const cache = loadAdultCacheSync();
+    return { enabled: db.getAdultEnabled(), domainCount: adultDomains.length, fetchedAt: cache ? cache.fetchedAt : null };
+  });
+  ipcMain.handle('adult:enable', async () => {
+    try {
+      await ensureAdultDomains();
+      db.setAdultEnabled(true);
+      queueHostsSync();
+      return { ok: true, domainCount: adultDomains.length };
+    } catch (e) {
+      log('[adult] enable failed:', e.message);
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('adult:disable', () => {
+    db.setAdultEnabled(false);
+    queueHostsSync();
+    return { ok: true };
+  });
 }
 
 app.whenReady().then(async () => {
   try {
     db.init();
+    if (db.getAdultEnabled()) {
+      const cache = loadAdultCacheSync();
+      if (cache && cache.domains && cache.domains.length > 0) {
+        adultDomains = cache.domains;
+        log(`[adult] startup: ${adultDomains.length} cached domains`);
+      } else {
+        db.setAdultEnabled(false);
+        log('[adult] startup: no cache found, disabling adult mode');
+      }
+    }
     checkDailyReset();
     registerIpc();
     createWindow();

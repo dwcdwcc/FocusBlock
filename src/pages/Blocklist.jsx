@@ -3,6 +3,34 @@ import {
   DomainBadge, Icon, Kbd, Card, PageHeader, EmptyState
 } from '../App.jsx';
 
+const SUGGESTED_SITES = [
+  { domain: 'youtube.com',    label: 'YouTube',      category: 'Video'     },
+  { domain: 'facebook.com',   label: 'Facebook',     category: 'Social'    },
+  { domain: 'messenger.com',  label: 'Messenger',    category: 'Chat'      },
+  { domain: 'tiktok.com',     label: 'TikTok',       category: 'Social'    },
+  { domain: 'telegram.org',   label: 'Telegram',     category: 'Chat'      },
+  { domain: 'instagram.com',  label: 'Instagram',    category: 'Social'    },
+  { domain: 'twitter.com',    label: 'Twitter / X',  category: 'Social'    },
+  { domain: 'reddit.com',     label: 'Reddit',       category: 'Forum'     },
+  { domain: 'vnexpress.net',  label: 'VnExpress',    category: 'Tin tức'   },
+  { domain: 'hyperliquid.xyz',label: 'Hyperliquid',  category: 'Crypto'    },
+  { domain: 'tradingview.com',label: 'TradingView',  category: 'Trading'   },
+  { domain: 'binance.com',    label: 'Binance',      category: 'Crypto'    },
+  { domain: 'shopee.vn',      label: 'Shopee',       category: 'Shopping'  },
+  { domain: 'discord.com',    label: 'Discord',      category: 'Chat'      },
+  { domain: 'netflix.com',    label: 'Netflix',      category: 'Streaming' },
+];
+
+function fmtSeconds(s) {
+  if (!s || s < 5) return null;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  if (m > 0) return `${m}m`;
+  return '<1m';
+}
+
 export default function Blocklist() {
   const [items, setItems] = useState([]);
   const [input, setInput] = useState('');
@@ -10,14 +38,34 @@ export default function Blocklist() {
   const [justAdded, setJustAdded] = useState(null);
   const inputRef = useRef(null);
 
+  const [adultStatus, setAdultStatus] = useState({ enabled: false, domainCount: 0, fetchedAt: null });
+  const [adultLoading, setAdultLoading] = useState(false);
+  const [adultError, setAdultError] = useState('');
+
+  const [siteStats, setSiteStats] = useState({});
+
   async function refresh() {
     const data = await window.api.blocklist.list();
     setItems(data);
   }
 
-  useEffect(() => { refresh(); }, []);
+  async function refreshAdultStatus() {
+    const s = await window.api.adult.status();
+    setAdultStatus(s);
+  }
 
-  // Focus shortcut: press "/" anywhere to focus the input.
+  async function refreshSiteStats() {
+    const domains = SUGGESTED_SITES.map(s => s.domain);
+    const totals = await window.api.stats.domainsTotal(domains);
+    setSiteStats(totals || {});
+  }
+
+  useEffect(() => {
+    refresh();
+    refreshAdultStatus();
+    refreshSiteStats();
+  }, []);
+
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === '/' && document.activeElement !== inputRef.current) {
@@ -54,8 +102,38 @@ export default function Blocklist() {
     refresh();
   }
 
+  async function onQuickAdd(domain) {
+    await window.api.blocklist.add(domain);
+    setJustAdded(domain);
+    setTimeout(() => setJustAdded(null), 1200);
+    refresh();
+  }
+
+  async function toggleAdult() {
+    if (adultLoading) return;
+    setAdultLoading(true);
+    setAdultError('');
+    try {
+      let result;
+      if (adultStatus.enabled) {
+        result = await window.api.adult.disable();
+      } else {
+        result = await window.api.adult.enable();
+      }
+      if (result && !result.ok && result.error) {
+        setAdultError(result.error);
+      }
+      await refreshAdultStatus();
+    } catch (e) {
+      setAdultError(e.message || 'Failed');
+    } finally {
+      setAdultLoading(false);
+    }
+  }
+
   const userBlocked  = items.filter(i => i.reason !== 'limit');
   const limitBlocked = items.filter(i => i.reason === 'limit');
+  const blockedSet   = new Set(items.map(i => i.domain));
 
   return (
     <div className="pb-8">
@@ -97,7 +175,102 @@ export default function Blocklist() {
           {error && <div className="absolute -bottom-5 left-3 text-[11px] text-red-400">{error}</div>}
         </form>
 
-        {/* List */}
+        {/* Adult Content Toggle */}
+        <Card>
+          <div className="px-4 py-3.5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-500/[0.12] border border-red-500/20 flex items-center justify-center text-[15px] select-none">
+                🔞
+              </div>
+              <div>
+                <div className="text-[13px] font-semibold text-zinc-100">Block Adult Content (18+)</div>
+                <div className="text-[11px] text-zinc-500 mt-0.5">
+                  {adultStatus.enabled
+                    ? `${adultStatus.domainCount.toLocaleString()} domains blocked via StevenBlack`
+                    : 'Blocks 40,000+ adult domains system-wide via StevenBlack'}
+                </div>
+                {adultError && (
+                  <div className="text-[11px] text-red-400 mt-1">{adultError}</div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={toggleAdult}
+              disabled={adultLoading}
+              className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none
+                ${adultStatus.enabled ? 'bg-red-500/80' : 'bg-white/[0.08]'}
+                ${adultLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:opacity-90'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200
+                ${adultStatus.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+          {adultStatus.enabled && adultStatus.fetchedAt && (
+            <div className="px-4 pb-3 text-[10px] text-zinc-600 flex items-center gap-1.5">
+              <Icon name="check" className="w-3 h-3 text-emerald-500/60" />
+              List updated {new Date(adultStatus.fetchedAt).toLocaleDateString()}
+            </div>
+          )}
+          {adultLoading && !adultStatus.enabled && (
+            <div className="px-4 pb-3 text-[10px] text-zinc-500 flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full border border-zinc-500 border-t-transparent animate-spin" />
+              Downloading list from StevenBlack...
+            </div>
+          )}
+        </Card>
+
+        {/* Quick Add — Suggested Sites */}
+        <Card>
+          <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 font-semibold">Quick Add</div>
+            <div className="text-[10px] text-zinc-600">Based on your usage</div>
+          </div>
+          <ul className="pb-1.5">
+            {SUGGESTED_SITES.map((site) => {
+              const isBlocked = blockedSet.has(site.domain);
+              const usage = fmtSeconds(siteStats[site.domain]);
+              const isNew = justAdded === site.domain;
+              return (
+                <li
+                  key={site.domain}
+                  className={`flex items-center gap-3 px-4 py-2 transition
+                    ${isNew ? 'bg-violet-500/[0.08]' : 'hover:bg-white/[0.025]'}`}
+                >
+                  <DomainBadge domain={site.domain} />
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    <span className={`text-[13px] truncate ${isBlocked ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+                      {site.label}
+                    </span>
+                    <span className="text-[10px] text-zinc-600 bg-white/[0.04] border border-white/[0.05] rounded px-1.5 py-0.5 flex-shrink-0">
+                      {site.category}
+                    </span>
+                    {usage && (
+                      <span className="text-[10px] font-mono text-amber-400/70 flex-shrink-0">
+                        {usage}
+                      </span>
+                    )}
+                  </div>
+                  {isBlocked ? (
+                    <span className="flex items-center gap-1 text-[11px] text-emerald-400/70 bg-emerald-500/[0.08] border border-emerald-500/20 rounded-md px-2 py-1 flex-shrink-0">
+                      <Icon name="check" className="w-3 h-3" />
+                      Blocked
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => onQuickAdd(site.domain)}
+                      className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-violet-300 hover:bg-violet-500/[0.08] border border-transparent hover:border-violet-500/20 px-2 py-1 rounded-md transition flex-shrink-0"
+                    >
+                      <Icon name="plus" className="w-3 h-3" />
+                      Add
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+
+        {/* Blocked Domains List */}
         <Card>
           <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5">
             <div className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 font-semibold">Blocked domains</div>

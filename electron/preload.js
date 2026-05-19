@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld('api', {
     add: (domain) => ipcRenderer.invoke('blocklist:add', domain),
     remove: (domain) => ipcRenderer.invoke('blocklist:remove', domain)
   },
+  adult: {
+    status: () => ipcRenderer.invoke('adult:status'),
+    enable: () => ipcRenderer.invoke('adult:enable'),
+    disable: () => ipcRenderer.invoke('adult:disable')
+  },
   limits: {
     list: () => ipcRenderer.invoke('limits:list'),
     set: (domain, minutes) => ipcRenderer.invoke('limits:set', { domain, minutes }),
@@ -16,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
     appToday: () => ipcRenderer.invoke('stats:app-today'),
     range: (days) => ipcRenderer.invoke('stats:range', days),
     top: (days) => ipcRenderer.invoke('stats:top', days),
-    appTop: (days) => ipcRenderer.invoke('stats:app-top', days)
+    appTop: (days) => ipcRenderer.invoke('stats:app-top', days),
+    domainsTotal: (domains) => ipcRenderer.invoke('stats:domains-total', domains)
   }
 });

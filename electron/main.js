@@ -26,6 +26,7 @@ let blocklistServer = null;
 
 const ADULT_LIST_URL = 'https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn/hosts';
 const ADULT_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_ADULT_DOMAINS = 4000;
 let adultDomains = [];
 
 function getAdultCachePath() {
@@ -57,6 +58,7 @@ function parseAdultHosts(text) {
     const d = parts[1].toLowerCase();
     if (d === '0.0.0.0' || d === 'localhost' || d.startsWith('www.')) continue;
     domains.push(d);
+    if (domains.length >= MAX_ADULT_DOMAINS) break;
   }
   return domains;
 }
@@ -81,8 +83,13 @@ function fetchUrl(url, redirects = 5) {
 async function ensureAdultDomains() {
   const cache = loadAdultCacheSync();
   if (isAdultCacheFresh(cache) && cache.domains && cache.domains.length > 0) {
-    adultDomains = cache.domains;
-    log(`[adult] loaded ${adultDomains.length} domains from cache`);
+    adultDomains = cache.domains.slice(0, MAX_ADULT_DOMAINS);
+    if (cache.domains.length > MAX_ADULT_DOMAINS) {
+      saveAdultCache(adultDomains);
+      log(`[adult] truncated cache ${cache.domains.length} -> ${adultDomains.length}`);
+    } else {
+      log(`[adult] loaded ${adultDomains.length} domains from cache`);
+    }
     return;
   }
   log('[adult] fetching StevenBlack porn list...');
@@ -102,10 +109,10 @@ async function queueHostsSync() {
   }
   hostsSyncRunning = true;
   try {
-    const domains = [...db.allBlockedDomains(), ...(db.getAdultEnabled() ? adultDomains : [])];
+    const domains = db.allBlockedDomains();
     await hosts.sync(domains);
   } catch (e) {
-    console.error('hosts sync failed', e.message);
+    log('[hosts] sync failed:', e.message, '— run app as Administrator for system-wide blocking; extension blocking still works');
   } finally {
     hostsSyncRunning = false;
     if (hostsSyncQueued) {
@@ -158,7 +165,7 @@ function startBlocklistServer() {
       res.writeHead(405); res.end(); return;
     }
     if (req.url.startsWith('/blocklist')) {
-      const domains = db.allBlockedDomains();
+      const domains = [...db.allBlockedDomains(), ...(db.getAdultEnabled() ? adultDomains : [])];
       res.writeHead(200, {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
@@ -421,7 +428,7 @@ app.whenReady().then(async () => {
     if (db.getAdultEnabled()) {
       const cache = loadAdultCacheSync();
       if (cache && cache.domains && cache.domains.length > 0) {
-        adultDomains = cache.domains;
+        adultDomains = cache.domains.slice(0, MAX_ADULT_DOMAINS);
         log(`[adult] startup: ${adultDomains.length} cached domains`);
       } else {
         db.setAdultEnabled(false);

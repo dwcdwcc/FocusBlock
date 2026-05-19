@@ -9,10 +9,16 @@ const HOSTS_PATH = process.platform === 'win32'
 const MARK_START = '# === FocusBlock START ===';
 const MARK_END = '# === FocusBlock END ===';
 const REDIRECT = '127.0.0.1';
+const MAX_HOSTS_ENTRIES = 500;
 
 function buildBlock(domains) {
   const lines = [MARK_START];
-  for (const d of domains) {
+  let list = domains;
+  if (list.length > MAX_HOSTS_ENTRIES) {
+    console.warn(`[hosts] ${list.length} domains exceeds safety cap ${MAX_HOSTS_ENTRIES} — truncating to avoid DNS resolver slowdown`);
+    list = list.slice(0, MAX_HOSTS_ENTRIES);
+  }
+  for (const d of list) {
     const clean = d.trim().toLowerCase();
     if (!clean) continue;
     lines.push(`${REDIRECT} ${clean}`);

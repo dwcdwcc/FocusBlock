@@ -178,7 +178,7 @@ export default function App() {
               </span>
               <span className="text-[10.5px] text-zinc-400 font-medium">Tracking active</span>
             </div>
-            <div className="text-[9.5px] text-zinc-600 font-mono">v0.1.0 · local-only</div>
+            <div className="text-[9.5px] text-zinc-600 font-mono">v{__APP_VERSION__} · local-only</div>
           </div>
         </div>
       </aside>
